@@ -47,6 +47,29 @@
 
       <section class="panel">
         <div class="panel-header">
+          <h2>Painel ADM (importação)</h2>
+          <small id="adminLastImport">Sem importação recente</small>
+        </div>
+        <p id="adminInfo">Envie o arquivo no painel ADM para atualizar os dados que os usuários visualizam.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Arquivo</th>
+                <th>Formato</th>
+                <th>Data/Hora</th>
+                <th>Registros</th>
+              </tr>
+            </thead>
+            <tbody id="importHistoryBody">
+              <tr><td colspan="4">Nenhuma importação registrada.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
           <h2>Alertas automáticos (SQL42 / TopCon)</h2>
           <small id="alertsGeneratedAt">Aguardando processamento...</small>
         </div>

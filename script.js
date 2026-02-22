@@ -1,3 +1,6 @@
+const STORAGE_DATA_KEY = "remessas_admin_data_v1";
+const STORAGE_IMPORTS_KEY = "remessas_admin_imports_v1";
+
 const state = {
   data: [],
   filtered: [],
@@ -32,17 +35,20 @@ const el = {
   alertsTableBody: document.getElementById("alertsTableBody"),
   alertsMeta: document.getElementById("alertsMeta"),
   alertsGeneratedAt: document.getElementById("alertsGeneratedAt"),
+  importHistoryBody: document.getElementById("importHistoryBody"),
+  adminLastImport: document.getElementById("adminLastImport"),
+  adminInfo: document.getElementById("adminInfo"),
 };
 
 function normalizeRecord(item) {
   const volume = Number(item.volume || 0);
   return {
-    cnpj: item.cnpj || "-",
-    cliente: item.cliente || "-",
-    contrato: item.contrato || "-",
-    nomeObra: item.nomeObra || "-",
-    volume: Number.isFinite(volume) ? volume : 0,
-    ultimaRemessa: item.ultimaRemessa,
+    cnpj: item.cnpj || item.CNPJ || "-",
+    cliente: item.cliente || item.NomeCliente || "-",
+    contrato: item.contrato || item.Contrato || "-",
+    nomeObra: item.nomeObra || item.NomeObra || "-",
+    volume: Number.isFinite(volume) ? volume : Number(item.Volume || 0),
+    ultimaRemessa: item.ultimaRemessa || item.DataUltimaRemessa,
   };
 }
 
@@ -54,7 +60,6 @@ function parseDateSafe(date) {
 function daysWithoutShipment(date) {
   const parsed = parseDateSafe(date);
   if (!parsed) return 0;
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   parsed.setHours(0, 0, 0, 0);
@@ -82,6 +87,61 @@ function monthLabel(dateString) {
   const d = parseDateSafe(dateString);
   if (!d) return "inválido";
   return `${MONTH_NAMES[d.getMonth()]}/${d.getFullYear()}`;
+}
+
+function getImportHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_IMPORTS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveImportHistory(history) {
+  localStorage.setItem(STORAGE_IMPORTS_KEY, JSON.stringify(history.slice(0, 10)));
+}
+
+function registerImport(fileName, count) {
+  const extension = (fileName.split(".").pop() || "").toUpperCase();
+  const entry = {
+    fileName,
+    extension,
+    count,
+    importedAt: new Date().toISOString(),
+  };
+  const history = [entry, ...getImportHistory()];
+  saveImportHistory(history);
+  renderImportHistory();
+}
+
+function renderImportHistory() {
+  const history = getImportHistory();
+  if (!history.length) {
+    el.importHistoryBody.innerHTML = '<tr><td colspan="4">Nenhuma importação registrada.</td></tr>';
+    el.adminLastImport.textContent = "Sem importação recente";
+    return;
+  }
+
+  el.importHistoryBody.innerHTML = history
+    .map((item) => `<tr><td>${item.fileName}</td><td>${item.extension}</td><td>${new Date(item.importedAt).toLocaleString("pt-BR")}</td><td>${item.count}</td></tr>`)
+    .join("");
+  el.adminLastImport.textContent = `Última importação: ${new Date(history[0].importedAt).toLocaleString("pt-BR")}`;
+}
+
+function persistAdminData() {
+  localStorage.setItem(STORAGE_DATA_KEY, JSON.stringify(state.data));
+}
+
+function restoreAdminData() {
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_DATA_KEY) || "[]");
+    if (Array.isArray(data) && data.length) {
+      state.data = data.map(normalizeRecord);
+      el.adminInfo.textContent = "Dados do painel ADM carregados. Os usuários já visualizam a última importação.";
+    }
+  } catch {
+    state.data = [];
+  }
 }
 
 function updateFilters() {
@@ -120,9 +180,7 @@ function renderSummary() {
   const volumeTotal = state.filtered.reduce((sum, item) => sum + Number(item.volume), 0);
   const counters = { ok: 0, warn: 0, alert: 0, critical: 0 };
 
-  state.filtered.forEach((item) => {
-    counters[statusFromDays(daysWithoutShipment(item.ultimaRemessa))] += 1;
-  });
+  state.filtered.forEach((item) => { counters[statusFromDays(daysWithoutShipment(item.ultimaRemessa))] += 1; });
 
   setText("contractsCount", state.filtered.length);
   setText("clientsCount", uniqueClients);
@@ -135,47 +193,37 @@ function renderSummary() {
 
 function renderChart() {
   const grouped = {};
-  state.filtered.forEach((item) => {
-    const key = monthKey(item.ultimaRemessa);
-    grouped[key] = (grouped[key] || 0) + 1;
-  });
-
+  state.filtered.forEach((item) => { const key = monthKey(item.ultimaRemessa); grouped[key] = (grouped[key] || 0) + 1; });
   const entries = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
   const maxValue = Math.max(1, ...entries.map(([, value]) => value));
 
-  if (entries.length === 0) {
+  if (!entries.length) {
     el.chart.innerHTML = "<p>Sem dados para exibir no gráfico.</p>";
     return;
   }
 
-  el.chart.innerHTML = entries
-    .map(([month, value]) => {
-      const [year, mm] = month.split("-");
-      const syntheticDate = `${year}-${mm}-01`;
-      const height = 70 + (value / maxValue) * 170;
-      return `<div class="bar"><div class="bar-inner" style="height:${height}px"></div><small>${value}</small><label>${monthLabel(syntheticDate)}</label></div>`;
-    })
-    .join("");
+  el.chart.innerHTML = entries.map(([month, value]) => {
+    const [year, mm] = month.split("-");
+    const syntheticDate = `${year}-${mm}-01`;
+    const height = 70 + (value / maxValue) * 170;
+    return `<div class="bar"><div class="bar-inner" style="height:${height}px"></div><small>${value}</small><label>${monthLabel(syntheticDate)}</label></div>`;
+  }).join("");
 }
 
 function renderTable() {
   const totalPages = Math.max(1, Math.ceil(state.filtered.length / state.pageSize));
   state.page = Math.min(state.page, totalPages);
-
   const startIndex = (state.page - 1) * state.pageSize;
   const pageData = state.filtered.slice(startIndex, startIndex + state.pageSize);
 
-  el.tableBody.innerHTML = pageData
-    .map((item) => {
-      const days = daysWithoutShipment(item.ultimaRemessa);
-      const status = statusFromDays(days);
-      const months = (days / 30).toFixed(1);
-      const parsedDate = parseDateSafe(item.ultimaRemessa);
-      const formattedDate = parsedDate ? parsedDate.toLocaleDateString("pt-BR") : "-";
-
-      return `<tr><td>${item.cnpj}<br>${item.cliente}</td><td>${item.contrato}</td><td>${item.nomeObra}</td><td>${item.volume}</td><td>${formattedDate}</td><td>${days} dias (${months} meses)</td><td><span class="badge ${status}">${statusLabel(status)}</span></td></tr>`;
-    })
-    .join("");
+  el.tableBody.innerHTML = pageData.map((item) => {
+    const days = daysWithoutShipment(item.ultimaRemessa);
+    const status = statusFromDays(days);
+    const months = (days / 30).toFixed(1);
+    const parsedDate = parseDateSafe(item.ultimaRemessa);
+    const formattedDate = parsedDate ? parsedDate.toLocaleDateString("pt-BR") : "-";
+    return `<tr><td>${item.cnpj}<br>${item.cliente}</td><td>${item.contrato}</td><td>${item.nomeObra}</td><td>${item.volume}</td><td>${formattedDate}</td><td>${days} dias (${months} meses)</td><td><span class="badge ${status}">${statusLabel(status)}</span></td></tr>`;
+  }).join("");
 
   el.tableMeta.textContent = `Ordenado da maior para a menor urgência (dias sem remessa). Mostrando ${pageData.length} de ${state.filtered.length} registros • Página ${state.page}/${totalPages}`;
   el.prevPage.disabled = state.page <= 1;
@@ -218,31 +266,22 @@ function parseCsvLine(line, delimiter) {
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [];
-
   const delimiter = lines[0].includes(";") ? ";" : ",";
   const keys = parseCsvLine(lines[0], delimiter);
 
   return lines.slice(1).map((line) => {
     const values = parseCsvLine(line, delimiter);
     const obj = {};
-    keys.forEach((key, i) => {
-      obj[key] = values[i] || "";
-    });
-
+    keys.forEach((key, i) => { obj[key] = values[i] || ""; });
     return normalizeRecord(obj);
   });
 }
 
-
 function parseWorkbook(arrayBuffer) {
-  if (typeof XLSX === "undefined") {
-    throw new Error("Leitor XLS/XLSX indisponível no navegador.");
-  }
-
+  if (typeof XLSX === "undefined") throw new Error("Leitor XLS/XLSX indisponível no navegador.");
   const workbook = XLSX.read(arrayBuffer, { type: "array" });
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) return [];
-
   const worksheet = workbook.Sheets[firstSheetName];
   const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
   return rows.map((row) => normalizeRecord(row));
@@ -250,32 +289,23 @@ function parseWorkbook(arrayBuffer) {
 
 async function parseUploadedFile(file) {
   const extension = (file.name.toLowerCase().split(".").pop() || "").trim();
-
-  if (["csv", "csc"].includes(extension)) {
-    return parseCsv(await file.text());
-  }
-
-  if (["xls", "xlsx"].includes(extension)) {
-    return parseWorkbook(await file.arrayBuffer());
-  }
-
-  if (extension === "json") {
-    return JSON.parse(await file.text()).map(normalizeRecord);
-  }
-
+  if (["csv", "csc"].includes(extension)) return parseCsv(await file.text());
+  if (["xls", "xlsx"].includes(extension)) return parseWorkbook(await file.arrayBuffer());
+  if (extension === "json") return JSON.parse(await file.text()).map(normalizeRecord);
   throw new Error("Formato não suportado. Use CSC/CSV/XLS/XLSX/JSON.");
 }
 
-function loadRecords(records, sourceLabel) {
+function loadRecords(records, sourceLabel, sourceFile = "manual") {
   state.data = records.filter((item) => item.ultimaRemessa).map(normalizeRecord);
+  persistAdminData();
+  registerImport(sourceFile, state.data.length);
   updateFilters();
   applyFilters();
-  el.statusText.textContent = `${sourceLabel} carregado com sucesso (${state.data.length} registros).`;
+  el.statusText.textContent = `${sourceLabel} carregado com sucesso (${state.data.length} registros). Usuários já podem visualizar.`;
 }
 
 function renderAlertsRows(alertData) {
   const rows = alertData.alertas || [];
-
   el.alertsGeneratedAt.textContent = `Gerado em: ${alertData.gerado_em || "-"}`;
   el.alertsMeta.innerHTML = `Regra: se <strong>data de hoje - data da última remessa &gt; 7</strong>, status = <strong>PLANO DE AÇÃO</strong>. Total de alertas: <strong>${rows.length}</strong>.`;
 
@@ -284,44 +314,36 @@ function renderAlertsRows(alertData) {
     return;
   }
 
-  el.alertsTableBody.innerHTML = rows
-    .map((row) => `<tr><td>${row.CodCliente} - ${row.NomeCliente}</td><td>${row.DataUltimaRemessa}</td><td>${row.DiasSemRemessa}</td><td><span class="badge critical">Plano de ação</span></td><td>${row.Acao || "Criar PLANO DE AÇÃO"}</td></tr>`)
-    .join("");
+  el.alertsTableBody.innerHTML = rows.map((row) => `<tr><td>${row.CodCliente} - ${row.NomeCliente}</td><td>${row.DataUltimaRemessa}</td><td>${row.DiasSemRemessa}</td><td><span class="badge critical">Plano de ação</span></td><td>${row.Acao || "Criar PLANO DE AÇÃO"}</td></tr>`).join("");
 }
 
 async function loadGeneratedAlerts() {
   try {
     const response = await fetch("./alerts.json", { cache: "no-store" });
     if (!response.ok) throw new Error("alerts.json não encontrado");
-    const data = await response.json();
-    renderAlertsRows(data);
+    renderAlertsRows(await response.json());
   } catch {
-    renderAlertsRows({
-      gerado_em: new Date().toISOString().slice(0, 10),
-      alertas: [],
-    });
+    renderAlertsRows({ gerado_em: new Date().toISOString().slice(0, 10), alertas: [] });
   }
 }
 
 el.fileInput.addEventListener("change", () => {
   const file = el.fileInput.files[0];
-  if (file) el.statusText.textContent = `Arquivo selecionado: ${file.name} (suporta CSC/CSV/XLS/XLSX/JSON)`;
+  if (file) el.statusText.textContent = `Arquivo selecionado no painel ADM: ${file.name} (CSC/CSV/XLS/XLSX/JSON)`;
 });
 
-el.demoBtn.addEventListener("click", () => {
-  loadRecords(demoData, "Demo");
-});
+el.demoBtn.addEventListener("click", () => loadRecords(demoData, "Demo", "demo_local"));
 
 el.uploadBtn.addEventListener("click", async () => {
   const file = el.fileInput.files[0];
   if (!file) {
-    el.statusText.textContent = "Selecione um arquivo primeiro.";
+    el.statusText.textContent = "Selecione um arquivo primeiro no painel ADM.";
     return;
   }
 
   try {
     const records = await parseUploadedFile(file);
-    loadRecords(records, "Arquivo");
+    loadRecords(records, "Arquivo", file.name);
   } catch (error) {
     el.statusText.textContent = `Falha ao carregar arquivo: ${error.message}`;
   }
@@ -331,8 +353,11 @@ el.clearBtn.addEventListener("click", () => {
   state.data = [];
   state.filtered = [];
   state.page = 1;
+  localStorage.removeItem(STORAGE_DATA_KEY);
+  localStorage.removeItem(STORAGE_IMPORTS_KEY);
   updateFilters();
   renderAll();
+  renderImportHistory();
   el.fileInput.value = "";
   el.statusText.textContent = "Dados limpos.";
 });
@@ -351,6 +376,8 @@ el.nextPage.addEventListener("click", () => {
   renderTable();
 });
 
+restoreAdminData();
 updateFilters();
-renderAll();
+applyFilters();
+renderImportHistory();
 loadGeneratedAlerts();

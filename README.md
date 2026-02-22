@@ -19,6 +19,13 @@ Se DiasSemRemessa > 7 => Status = PLANO_DE_ACAO
 
 ## O que foi implementado
 
+## Painel ADM para importação (visível aos usuários)
+
+- O upload é feito no **Painel ADM (importação)** dentro do portal.
+- Após importar, os dados ficam salvos no navegador (localStorage) e a visão do usuário já mostra os novos registros.
+- O painel ADM mantém um histórico das últimas importações (arquivo, formato, data/hora e quantidade de registros).
+
+
 - Interface web para visualização de indicadores e detalhamento.
 - Bloco de **Alertas automáticos (SQL42 / TopCon)** carregado de `alerts.json`.
 - Script `scripts/gerar_alertas.py` para processar relatórios em CSC/CSV/XLS/XLSX e gerar alertas.
