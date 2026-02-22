@@ -6,11 +6,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-INPUT_FILES = [
-    BASE_DIR / "data" / "sql42_complementar.csv",
-    BASE_DIR / "data" / "topcon_ultimo_consumo.csv",
-]
+DATA_DIR = BASE_DIR / "data"
 OUTPUT_FILE = BASE_DIR / "alerts.json"
+
+SUPPORTED_EXTENSIONS = {".csv", ".csc", ".xls", ".xlsx"}
 
 DATE_COLUMNS = ["DataUltimaRemessa", "Data_ultima_remessa", "data_ultima_remessa", "UltimaRemessa"]
 CLIENT_CODE_COLUMNS = ["CodCliente", "CodigoCliente", "Cliente", "Cod_Cliente"]
@@ -37,10 +36,7 @@ def first_value(row: dict[str, str], candidates: list[str], default: str = "") -
     return default
 
 
-def read_csv_rows(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        return []
-
+def read_delimited_rows(path: Path) -> list[dict[str, str]]:
     content = path.read_text(encoding="utf-8").splitlines()
     if not content:
         return []
@@ -51,12 +47,47 @@ def read_csv_rows(path: Path) -> list[dict[str, str]]:
         return [dict(row) for row in reader]
 
 
+def read_excel_rows(path: Path) -> list[dict[str, str]]:
+    try:
+        import pandas as pd  # type: ignore
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "Para processar XLS/XLSX no GitHub Action, instale pandas+openpyxl+xlrd."
+        ) from exc
+
+    rows: list[dict[str, str]] = []
+    data_frame = pd.read_excel(path)  # primeira aba
+    for _, row in data_frame.fillna("").iterrows():
+        rows.append({str(key): str(value) for key, value in row.to_dict().items()})
+    return rows
+
+
+def read_rows(path: Path) -> list[dict[str, str]]:
+    extension = path.suffix.lower()
+    if extension in {".csv", ".csc"}:
+        return read_delimited_rows(path)
+    if extension in {".xls", ".xlsx"}:
+        return read_excel_rows(path)
+    return []
+
+
+def discover_input_files() -> list[Path]:
+    if not DATA_DIR.exists():
+        return []
+    return sorted(
+        file
+        for file in DATA_DIR.iterdir()
+        if file.is_file() and file.suffix.lower() in SUPPORTED_EXTENSIONS
+    )
+
+
 def main() -> None:
     today = date.today()
     alerts: list[dict[str, str | int]] = []
 
-    for csv_file in INPUT_FILES:
-        for row in read_csv_rows(csv_file):
+    input_files = discover_input_files()
+    for data_file in input_files:
+        for row in read_rows(data_file):
             remessa_raw = first_value(row, DATE_COLUMNS)
             last_shipment = parse_date(remessa_raw)
             if not last_shipment:
@@ -71,7 +102,7 @@ def main() -> None:
 
             alerts.append(
                 {
-                    "Fonte": csv_file.name,
+                    "Fonte": data_file.name,
                     "CodCliente": client_code,
                     "NomeCliente": client_name,
                     "DataUltimaRemessa": last_shipment.isoformat(),
@@ -86,6 +117,7 @@ def main() -> None:
     payload = {
         "gerado_em": today.isoformat(),
         "regra": "data_hoje - data_ultima_remessa > 7",
+        "formatos_suportados": ["CSC", "CSV", "XLS", "XLSX"],
         "total_alertas": len(alerts),
         "alertas": alerts,
     }

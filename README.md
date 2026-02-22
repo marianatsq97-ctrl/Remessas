@@ -9,11 +9,19 @@ DiasSemRemessa = DataHoje - DataUltimaRemessa
 Se DiasSemRemessa > 7 => Status = PLANO_DE_ACAO
 ```
 
+## Formatos de importação aceitos
+
+- **CSC**
+- **CSV**
+- **XLS**
+- **XLSX**
+- JSON (mantido como compatibilidade)
+
 ## O que foi implementado
 
 - Interface web para visualização de indicadores e detalhamento.
 - Bloco de **Alertas automáticos (SQL42 / TopCon)** carregado de `alerts.json`.
-- Script `scripts/gerar_alertas.py` para processar relatórios CSV e gerar alertas.
+- Script `scripts/gerar_alertas.py` para processar relatórios em CSC/CSV/XLS/XLSX e gerar alertas.
 - Workflow `.github/workflows/processar-relatorios.yml` para:
   - processar relatórios ao atualizar `data/**`;
   - gerar/atualizar `alerts.json`;
@@ -40,9 +48,8 @@ Se DiasSemRemessa > 7 => Status = PLANO_DE_ACAO
 └─ script.js
 ```
 
-## Formato esperado (CSV)
+## Colunas mínimas esperadas
 
-Campos mínimos:
 - Código do cliente (`CodCliente` ou equivalente)
 - Nome do cliente (`NomeCliente` ou equivalente)
 - Data da última remessa (`DataUltimaRemessa`)
@@ -54,11 +61,9 @@ CodCliente;NomeCliente;DataUltimaRemessa;Volume
 001;Construtora XPTO;2026-01-01;120
 ```
 
-> O parser aceita `;` e `,`.
-
 ## Como usar
 
-1. Atualize os arquivos na pasta `data/` com seu SQL42 Complementar e TopCon.
+1. Atualize os arquivos na pasta `data/` com seu SQL42 Complementar e TopCon (CSC/CSV/XLS/XLSX).
 2. Faça `push` no GitHub.
 3. O GitHub Action gera `alerts.json` e atualiza a issue:
    - **ALERTAS – Último consumo (Dias sem remessa > 7)**

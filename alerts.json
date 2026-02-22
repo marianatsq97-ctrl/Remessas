@@ -1,6 +1,12 @@
 {
   "gerado_em": "2026-02-22",
   "regra": "data_hoje - data_ultima_remessa > 7",
+  "formatos_suportados": [
+    "CSC",
+    "CSV",
+    "XLS",
+    "XLSX"
+  ],
   "total_alertas": 3,
   "alertas": [
     {

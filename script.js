@@ -233,6 +233,39 @@ function parseCsv(text) {
   });
 }
 
+
+function parseWorkbook(arrayBuffer) {
+  if (typeof XLSX === "undefined") {
+    throw new Error("Leitor XLS/XLSX indisponível no navegador.");
+  }
+
+  const workbook = XLSX.read(arrayBuffer, { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) return [];
+
+  const worksheet = workbook.Sheets[firstSheetName];
+  const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+  return rows.map((row) => normalizeRecord(row));
+}
+
+async function parseUploadedFile(file) {
+  const extension = (file.name.toLowerCase().split(".").pop() || "").trim();
+
+  if (["csv", "csc"].includes(extension)) {
+    return parseCsv(await file.text());
+  }
+
+  if (["xls", "xlsx"].includes(extension)) {
+    return parseWorkbook(await file.arrayBuffer());
+  }
+
+  if (extension === "json") {
+    return JSON.parse(await file.text()).map(normalizeRecord);
+  }
+
+  throw new Error("Formato não suportado. Use CSC/CSV/XLS/XLSX/JSON.");
+}
+
 function loadRecords(records, sourceLabel) {
   state.data = records.filter((item) => item.ultimaRemessa).map(normalizeRecord);
   updateFilters();
@@ -272,7 +305,7 @@ async function loadGeneratedAlerts() {
 
 el.fileInput.addEventListener("change", () => {
   const file = el.fileInput.files[0];
-  if (file) el.statusText.textContent = `Arquivo selecionado: ${file.name}`;
+  if (file) el.statusText.textContent = `Arquivo selecionado: ${file.name} (suporta CSC/CSV/XLS/XLSX/JSON)`;
 });
 
 el.demoBtn.addEventListener("click", () => {
@@ -287,8 +320,7 @@ el.uploadBtn.addEventListener("click", async () => {
   }
 
   try {
-    const content = await file.text();
-    const records = file.name.toLowerCase().endsWith(".json") ? JSON.parse(content).map(normalizeRecord) : parseCsv(content);
+    const records = await parseUploadedFile(file);
     loadRecords(records, "Arquivo");
   } catch (error) {
     el.statusText.textContent = `Falha ao carregar arquivo: ${error.message}`;
