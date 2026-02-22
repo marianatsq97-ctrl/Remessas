@@ -1,0 +1,68 @@
+name: Processar relatórios e gerar alertas
+
+on:
+  push:
+    paths:
+      - "data/**"
+      - "scripts/**"
+      - ".github/workflows/processar-relatorios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  gerar-alertas:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Gerar alerts.json
+        run: python scripts/gerar_alertas.py
+
+      - name: Commit do alerts.json
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add alerts.json
+          git commit -m "chore: atualizar alertas automáticos" || echo "Sem alterações"
+          git push
+
+      - name: Atualizar issue de alertas
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('alerts.json', 'utf8'));
+            const title = 'ALERTAS – Último consumo (Dias sem remessa > 7)';
+
+            let body = `Gerado em: ${data.gerado_em}\nRegra: ${data.regra}\nTotal de alertas: ${data.total_alertas}\n\n`;
+            if (data.total_alertas === 0) {
+              body += '✅ Nenhum cliente acima de 7 dias sem remessa.';
+            } else {
+              body += '| Fonte | Cliente | Última remessa | Dias | Status | Ação |\n|---|---|---:|---:|---|---|\n';
+              for (const item of data.alertas.slice(0, 200)) {
+                body += `| ${item.Fonte} | ${item.CodCliente} - ${item.NomeCliente} | ${item.DataUltimaRemessa} | ${item.DiasSemRemessa} | ${item.Status} | ${item.Acao} |\n`;
+              }
+              if (data.alertas.length > 200) {
+                body += `\n(Mostrando 200 de ${data.alertas.length})\n`;
+              }
+            }
+
+            const { owner, repo } = context.repo;
+            const issues = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
+            const existing = issues.data.find(issue => issue.title === title);
+
+            if (existing) {
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title, body });
+            }

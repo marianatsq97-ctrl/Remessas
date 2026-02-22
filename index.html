@@ -11,7 +11,7 @@
       <header class="topbar">
         <div>
           <h1>Portal de Alertas - Remessas</h1>
-          <p>Acompanhamento de contratos e alertas de remessas.</p>
+          <p>Acompanhamento de contratos, consumo TopCon e alertas automáticos (&gt; 7 dias).</p>
         </div>
         <button class="btn btn-outline" type="button">Sair</button>
       </header>
@@ -42,6 +42,30 @@
             <span class="sr-only">Data final</span>
             <input type="date" id="endDate" />
           </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Alertas automáticos (SQL42 / TopCon)</h2>
+          <small id="alertsGeneratedAt">Aguardando processamento...</small>
+        </div>
+        <p id="alertsMeta">Regra: se <strong>data de hoje - data da última remessa &gt; 7</strong>, status = <strong>PLANO DE AÇÃO</strong>.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Última remessa</th>
+                <th>Dias sem remessa</th>
+                <th>Status</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="alertsTableBody">
+              <tr><td colspan="5">Sem alertas processados.</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -120,7 +144,7 @@
         </div>
       </section>
 
-      <footer class="footer">Build 2026-02-22g</footer>
+      <footer class="footer">Build 2026-02-22h</footer>
     </main>
 
     <script src="script.js"></script>

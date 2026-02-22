@@ -5,46 +5,12 @@ const state = {
   pageSize: 8,
 };
 
-const MONTH_NAMES = [
-  "jan",
-  "fev",
-  "mar",
-  "abr",
-  "mai",
-  "jun",
-  "jul",
-  "ago",
-  "set",
-  "out",
-  "nov",
-  "dez",
-];
+const MONTH_NAMES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 const demoData = [
-  {
-    cnpj: "12.345.678/0001-10",
-    cliente: "Cliente Construtora Delta",
-    contrato: "C-1003",
-    nomeObra: "Condomínio Horizonte",
-    volume: 20,
-    ultimaRemessa: "2026-01-02",
-  },
-  {
-    cnpj: "23.456.789/0001-11",
-    cliente: "Cliente Pedra Forte",
-    contrato: "C-1002",
-    nomeObra: "Edifício Atlântico",
-    volume: 7,
-    ultimaRemessa: "2026-01-07",
-  },
-  {
-    cnpj: "34.567.890/0001-12",
-    cliente: "Cliente Areia Azul",
-    contrato: "C-1001",
-    nomeObra: "Residencial Aquarela",
-    volume: 12,
-    ultimaRemessa: "2026-01-11",
-  },
+  { cnpj: "12.345.678/0001-10", cliente: "Cliente Construtora Delta", contrato: "C-1003", nomeObra: "Condomínio Horizonte", volume: 20, ultimaRemessa: "2026-01-02" },
+  { cnpj: "23.456.789/0001-11", cliente: "Cliente Pedra Forte", contrato: "C-1002", nomeObra: "Edifício Atlântico", volume: 7, ultimaRemessa: "2026-01-07" },
+  { cnpj: "34.567.890/0001-12", cliente: "Cliente Areia Azul", contrato: "C-1001", nomeObra: "Residencial Aquarela", volume: 12, ultimaRemessa: "2026-01-11" },
 ];
 
 const el = {
@@ -63,6 +29,9 @@ const el = {
   prevPage: document.getElementById("prevPage"),
   nextPage: document.getElementById("nextPage"),
   refreshChart: document.getElementById("refreshChart"),
+  alertsTableBody: document.getElementById("alertsTableBody"),
+  alertsMeta: document.getElementById("alertsMeta"),
+  alertsGeneratedAt: document.getElementById("alertsGeneratedAt"),
 };
 
 function normalizeRecord(item) {
@@ -77,9 +46,14 @@ function normalizeRecord(item) {
   };
 }
 
-function daysWithoutShipment(date) {
+function parseDateSafe(date) {
   const parsed = new Date(date);
-  if (Number.isNaN(parsed.getTime())) return 0;
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function daysWithoutShipment(date) {
+  const parsed = parseDateSafe(date);
+  if (!parsed) return 0;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -95,43 +69,25 @@ function statusFromDays(days) {
 }
 
 function statusLabel(status) {
-  return {
-    ok: "OK",
-    warn: "Atenção",
-    alert: "Atenção grave",
-    critical: "Plano de ação",
-  }[status];
+  return { ok: "OK", warn: "Atenção", alert: "Atenção grave", critical: "Plano de ação" }[status];
 }
 
 function monthKey(dateString) {
-  const d = new Date(dateString);
-  if (Number.isNaN(d.getTime())) return "inválido";
+  const d = parseDateSafe(dateString);
+  if (!d) return "inválido";
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function monthLabel(dateString) {
-  const d = new Date(dateString);
-  if (Number.isNaN(d.getTime())) return "inválido";
+  const d = parseDateSafe(dateString);
+  if (!d) return "inválido";
   return `${MONTH_NAMES[d.getMonth()]}/${d.getFullYear()}`;
 }
 
 function updateFilters() {
-  const years = [
-    ...new Set(
-      state.data
-        .map((item) => new Date(item.ultimaRemessa))
-        .filter((d) => !Number.isNaN(d.getTime()))
-        .map((d) => d.getFullYear())
-    ),
-  ].sort((a, b) => a - b);
-
-  el.yearFilter.innerHTML = `<option value="all">Ano: todos</option>${years
-    .map((year) => `<option value="${year}">${year}</option>`)
-    .join("")}`;
-
-  el.monthFilter.innerHTML = `<option value="all">Mês: todos</option>${MONTH_NAMES.map(
-    (month, index) => `<option value="${index + 1}">${month}</option>`
-  ).join("")}`;
+  const years = [...new Set(state.data.map((item) => parseDateSafe(item.ultimaRemessa)).filter(Boolean).map((d) => d.getFullYear()))].sort((a, b) => a - b);
+  el.yearFilter.innerHTML = `<option value="all">Ano: todos</option>${years.map((year) => `<option value="${year}">${year}</option>`).join("")}`;
+  el.monthFilter.innerHTML = `<option value="all">Mês: todos</option>${MONTH_NAMES.map((month, index) => `<option value="${index + 1}">${month}</option>`).join("")}`;
 }
 
 function applyFilters() {
@@ -141,8 +97,8 @@ function applyFilters() {
   const end = el.endDate.value ? new Date(el.endDate.value) : null;
 
   state.filtered = state.data.filter((item) => {
-    const d = new Date(item.ultimaRemessa);
-    if (Number.isNaN(d.getTime())) return false;
+    const d = parseDateSafe(item.ultimaRemessa);
+    if (!d) return false;
     if (year !== "all" && d.getFullYear() !== Number(year)) return false;
     if (month !== "all" && d.getMonth() + 1 !== Number(month)) return false;
     if (start && d < start) return false;
@@ -150,10 +106,7 @@ function applyFilters() {
     return true;
   });
 
-  state.filtered.sort(
-    (a, b) => daysWithoutShipment(b.ultimaRemessa) - daysWithoutShipment(a.ultimaRemessa)
-  );
-
+  state.filtered.sort((a, b) => daysWithoutShipment(b.ultimaRemessa) - daysWithoutShipment(a.ultimaRemessa));
   state.page = 1;
   renderAll();
 }
@@ -168,8 +121,7 @@ function renderSummary() {
   const counters = { ok: 0, warn: 0, alert: 0, critical: 0 };
 
   state.filtered.forEach((item) => {
-    const status = statusFromDays(daysWithoutShipment(item.ultimaRemessa));
-    counters[status] += 1;
+    counters[statusFromDays(daysWithoutShipment(item.ultimaRemessa))] += 1;
   });
 
   setText("contractsCount", state.filtered.length);
@@ -200,12 +152,8 @@ function renderChart() {
     .map(([month, value]) => {
       const [year, mm] = month.split("-");
       const syntheticDate = `${year}-${mm}-01`;
-      const h = 70 + (value / maxValue) * 170;
-      return `<div class="bar">
-        <div class="bar-inner" style="height:${h}px"></div>
-        <small>${value}</small>
-        <label>${monthLabel(syntheticDate)}</label>
-      </div>`;
+      const height = 70 + (value / maxValue) * 170;
+      return `<div class="bar"><div class="bar-inner" style="height:${height}px"></div><small>${value}</small><label>${monthLabel(syntheticDate)}</label></div>`;
     })
     .join("");
 }
@@ -222,21 +170,14 @@ function renderTable() {
       const days = daysWithoutShipment(item.ultimaRemessa);
       const status = statusFromDays(days);
       const months = (days / 30).toFixed(1);
-      const formattedDate = new Date(item.ultimaRemessa).toLocaleDateString("pt-BR");
-      return `<tr>
-        <td>${item.cnpj}<br>${item.cliente}</td>
-        <td>${item.contrato}</td>
-        <td>${item.nomeObra}</td>
-        <td>${item.volume}</td>
-        <td>${formattedDate}</td>
-        <td>${days} dias (${months} meses)</td>
-        <td><span class="badge ${status}">${statusLabel(status)}</span></td>
-      </tr>`;
+      const parsedDate = parseDateSafe(item.ultimaRemessa);
+      const formattedDate = parsedDate ? parsedDate.toLocaleDateString("pt-BR") : "-";
+
+      return `<tr><td>${item.cnpj}<br>${item.cliente}</td><td>${item.contrato}</td><td>${item.nomeObra}</td><td>${item.volume}</td><td>${formattedDate}</td><td>${days} dias (${months} meses)</td><td><span class="badge ${status}">${statusLabel(status)}</span></td></tr>`;
     })
     .join("");
 
   el.tableMeta.textContent = `Ordenado da maior para a menor urgência (dias sem remessa). Mostrando ${pageData.length} de ${state.filtered.length} registros • Página ${state.page}/${totalPages}`;
-
   el.prevPage.disabled = state.page <= 1;
   el.nextPage.disabled = state.page >= totalPages;
 }
@@ -275,11 +216,7 @@ function parseCsvLine(line, delimiter) {
 }
 
 function parseCsv(text) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [];
 
   const delimiter = lines[0].includes(";") ? ";" : ",";
@@ -292,11 +229,7 @@ function parseCsv(text) {
       obj[key] = values[i] || "";
     });
 
-    return normalizeRecord({
-      ...obj,
-      volume: obj.volume,
-      ultimaRemessa: obj.ultimaRemessa,
-    });
+    return normalizeRecord(obj);
   });
 }
 
@@ -307,11 +240,39 @@ function loadRecords(records, sourceLabel) {
   el.statusText.textContent = `${sourceLabel} carregado com sucesso (${state.data.length} registros).`;
 }
 
+function renderAlertsRows(alertData) {
+  const rows = alertData.alertas || [];
+
+  el.alertsGeneratedAt.textContent = `Gerado em: ${alertData.gerado_em || "-"}`;
+  el.alertsMeta.innerHTML = `Regra: se <strong>data de hoje - data da última remessa &gt; 7</strong>, status = <strong>PLANO DE AÇÃO</strong>. Total de alertas: <strong>${rows.length}</strong>.`;
+
+  if (!rows.length) {
+    el.alertsTableBody.innerHTML = '<tr><td colspan="5">✅ Nenhum cliente acima de 7 dias sem remessa.</td></tr>';
+    return;
+  }
+
+  el.alertsTableBody.innerHTML = rows
+    .map((row) => `<tr><td>${row.CodCliente} - ${row.NomeCliente}</td><td>${row.DataUltimaRemessa}</td><td>${row.DiasSemRemessa}</td><td><span class="badge critical">Plano de ação</span></td><td>${row.Acao || "Criar PLANO DE AÇÃO"}</td></tr>`)
+    .join("");
+}
+
+async function loadGeneratedAlerts() {
+  try {
+    const response = await fetch("./alerts.json", { cache: "no-store" });
+    if (!response.ok) throw new Error("alerts.json não encontrado");
+    const data = await response.json();
+    renderAlertsRows(data);
+  } catch {
+    renderAlertsRows({
+      gerado_em: new Date().toISOString().slice(0, 10),
+      alertas: [],
+    });
+  }
+}
+
 el.fileInput.addEventListener("change", () => {
   const file = el.fileInput.files[0];
-  if (file) {
-    el.statusText.textContent = `Arquivo selecionado: ${file.name}`;
-  }
+  if (file) el.statusText.textContent = `Arquivo selecionado: ${file.name}`;
 });
 
 el.demoBtn.addEventListener("click", () => {
@@ -327,10 +288,7 @@ el.uploadBtn.addEventListener("click", async () => {
 
   try {
     const content = await file.text();
-    const records = file.name.toLowerCase().endsWith(".json")
-      ? JSON.parse(content).map(normalizeRecord)
-      : parseCsv(content);
-
+    const records = file.name.toLowerCase().endsWith(".json") ? JSON.parse(content).map(normalizeRecord) : parseCsv(content);
     loadRecords(records, "Arquivo");
   } catch (error) {
     el.statusText.textContent = `Falha ao carregar arquivo: ${error.message}`;
@@ -347,10 +305,7 @@ el.clearBtn.addEventListener("click", () => {
   el.statusText.textContent = "Dados limpos.";
 });
 
-[el.yearFilter, el.monthFilter, el.startDate, el.endDate].forEach((item) => {
-  item.addEventListener("change", applyFilters);
-});
-
+[el.yearFilter, el.monthFilter, el.startDate, el.endDate].forEach((item) => item.addEventListener("change", applyFilters));
 el.refreshChart.addEventListener("click", renderChart);
 
 el.prevPage.addEventListener("click", () => {
@@ -366,3 +321,4 @@ el.nextPage.addEventListener("click", () => {
 
 updateFilters();
 renderAll();
+loadGeneratedAlerts();

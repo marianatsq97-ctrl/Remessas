@@ -1,57 +1,74 @@
-# Portal de Alertas - Remessas
+# Portal de Alertas - Remessas (SQL42 + TopCon)
 
-Portal web estático para monitoramento de contratos e alertas de remessas, em layout escuro no padrão do mockup.
+Portal no estilo **Areia Ana** para monitorar remessas e gerar alerta automático quando um cliente ficar **mais de 7 dias sem remessa**.
 
-## Funcionalidades
+## Regra de negócio
 
-- Upload de dados por arquivo **CSV** ou **JSON**.
-- Demo pronta para validação rápida da interface.
-- Filtros por ano, mês e período (data inicial/final).
-- Cards de resumo com níveis de criticidade:
-  - **OK** (0 a 7 dias sem remessa)
-  - **Atenção** (8 a 14 dias)
-  - **Atenção grave** (15 a 21 dias)
-  - **Plano de ação** (> 21 dias)
-- Gráfico de evolução mensal de remessas.
-- Tabela detalhada com paginação.
+```text
+DiasSemRemessa = DataHoje - DataUltimaRemessa
+Se DiasSemRemessa > 7 => Status = PLANO_DE_ACAO
+```
 
-## Formato esperado do CSV
+## O que foi implementado
 
-> Delimitador aceito: vírgula `,` ou ponto e vírgula `;`
+- Interface web para visualização de indicadores e detalhamento.
+- Bloco de **Alertas automáticos (SQL42 / TopCon)** carregado de `alerts.json`.
+- Script `scripts/gerar_alertas.py` para processar relatórios CSV e gerar alertas.
+- Workflow `.github/workflows/processar-relatorios.yml` para:
+  - processar relatórios ao atualizar `data/**`;
+  - gerar/atualizar `alerts.json`;
+  - criar/atualizar Issue com os alertas (notificação por e-mail/app GitHub).
+- SQL de referência em `sql/consultas_alerta.sql` com coluna `DiasSemRemessa` e status.
+
+## Estrutura
+
+```text
+.
+├─ data/
+│  ├─ sql42_complementar.csv
+│  └─ topcon_ultimo_consumo.csv
+├─ scripts/
+│  └─ gerar_alertas.py
+├─ .github/workflows/
+│  ├─ processar-relatorios.yml
+│  └─ deploy-pages.yml
+├─ sql/
+│  └─ consultas_alerta.sql
+├─ alerts.json
+├─ index.html
+├─ styles.css
+└─ script.js
+```
+
+## Formato esperado (CSV)
+
+Campos mínimos:
+- Código do cliente (`CodCliente` ou equivalente)
+- Nome do cliente (`NomeCliente` ou equivalente)
+- Data da última remessa (`DataUltimaRemessa`)
+
+Exemplo:
 
 ```csv
-cnpj,cliente,contrato,nomeObra,volume,ultimaRemessa
-12.345.678/0001-10,Cliente X,C-1001,Obra Y,15,2026-01-12
+CodCliente;NomeCliente;DataUltimaRemessa;Volume
+001;Construtora XPTO;2026-01-01;120
 ```
 
-## Formato esperado do JSON
+> O parser aceita `;` e `,`.
 
-```json
-[
-  {
-    "cnpj": "12.345.678/0001-10",
-    "cliente": "Cliente X",
-    "contrato": "C-1001",
-    "nomeObra": "Obra Y",
-    "volume": 15,
-    "ultimaRemessa": "2026-01-12"
-  }
-]
-```
+## Como usar
 
-## Executar localmente
+1. Atualize os arquivos na pasta `data/` com seu SQL42 Complementar e TopCon.
+2. Faça `push` no GitHub.
+3. O GitHub Action gera `alerts.json` e atualiza a issue:
+   - **ALERTAS – Último consumo (Dias sem remessa > 7)**
+4. Abra o portal (GitHub Pages) para visualizar os alertas no painel.
 
-### Opção 1: abrir direto
-Abra o arquivo `index.html` no navegador.
+## Rodar localmente
 
-### Opção 2: servidor local
 ```bash
+python3 scripts/gerar_alertas.py
 python3 -m http.server 4180
 ```
-Depois, acesse `http://127.0.0.1:4180`.
 
-## Publicar no GitHub Pages
-
-1. Envie os arquivos para um repositório no GitHub.
-2. Em **Settings > Pages**, selecione a branch principal e a pasta `/ (root)`.
-3. Salve e aguarde a URL pública ser gerada.
+Acesse: `http://127.0.0.1:4180`

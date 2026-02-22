@@ -1,0 +1,34 @@
+{
+  "gerado_em": "2026-02-22",
+  "regra": "data_hoje - data_ultima_remessa > 7",
+  "total_alertas": 3,
+  "alertas": [
+    {
+      "Fonte": "sql42_complementar.csv",
+      "CodCliente": "001",
+      "NomeCliente": "Construtora XPTO",
+      "DataUltimaRemessa": "2026-01-01",
+      "DiasSemRemessa": 52,
+      "Status": "PLANO_DE_ACAO",
+      "Acao": "Criar PLANO DE AÇÃO"
+    },
+    {
+      "Fonte": "topcon_ultimo_consumo.csv",
+      "CodCliente": "T001",
+      "NomeCliente": "Topcon Alfa",
+      "DataUltimaRemessa": "2026-01-05",
+      "DiasSemRemessa": 48,
+      "Status": "PLANO_DE_ACAO",
+      "Acao": "Criar PLANO DE AÇÃO"
+    },
+    {
+      "Fonte": "sql42_complementar.csv",
+      "CodCliente": "003",
+      "NomeCliente": "Cliente Delta",
+      "DataUltimaRemessa": "2026-01-18",
+      "DiasSemRemessa": 35,
+      "Status": "PLANO_DE_ACAO",
+      "Acao": "Criar PLANO DE AÇÃO"
+    }
+  ]
+}
